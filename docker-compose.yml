@@ -1,5 +1,5 @@
 # Docker Compose - Infrastructure locale AIS
-# Services : PostgreSQL 16
+# Services : PostgreSQL 16, Redis 7
 # Lancement : docker-compose up -d
 # Arrêt : docker-compose down
 
@@ -15,13 +15,36 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ais_postgres_data:/var/lib/postgresql/data
+    networks:
+      - ais_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ais_user -d ais_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: ais_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - ais_redis_data:/data
+    networks:
+      - ais_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  ais_network:
+    driver: bridge
+
 volumes:
-  postgres_data:
-    name: ais_postgres_data
+  ais_postgres_data:
+  ais_redis_data:

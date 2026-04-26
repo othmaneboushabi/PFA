@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.api.routes import health, transcription
+from app.api.routes import health, ner, transcription, translation
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -90,8 +90,16 @@ app.include_router(
     prefix=settings.api_prefix,
     tags=["Transcription"],
 )
-
-
+app.include_router(
+    ner.router,
+    prefix=settings.api_prefix,
+    tags=["NER"],
+)
+app.include_router(
+    translation.router,
+    prefix=settings.api_prefix,
+    tags=["Translation"],
+)
 # ===== Route racine =====
 @app.get("/", tags=["Root"])
 async def root() -> dict:
