@@ -1,13 +1,10 @@
-"""Service NER (Named Entity Recognition) multilingue basé sur spaCy.
+"""Service NER (Named Entity Recognition) multilingue basé sur spaCy + HuggingFace.
 
-Ce module encapsule la logique d'extraction d'entités nommées :
-    - Support multilingue : FR, EN, ES (AR via CAMeL-BERT en J11-J12)
-    - Chargement paresseux des modèles spaCy
-    - Normalisation des labels pour uniformiser l'API
-    - Détection automatique ou manuelle de la langue
-
-Pattern Singleton : une seule instance de chaque modèle spaCy est chargée
-en mémoire pour toute l'application.
+Support multilingue :
+    - FR : fr_core_news_lg (spaCy)
+    - EN : en_core_web_lg (spaCy)
+    - ES : es_core_news_lg (spaCy)
+    - AR : CAMeL-Lab/bert-base-arabic-camelbert-msa-ner (HuggingFace)
 
 Labels normalisés retournés :
     - PER : personnes
@@ -23,14 +20,8 @@ from loguru import logger
 
 
 class NERService:
-    """Service d'extraction d'entités nommées via spaCy.
+    """Service d'extraction d'entités nommées via spaCy + HuggingFace."""
 
-    Les modèles sont chargés de manière paresseuse (lazy loading)
-    lors du premier appel à extract_entities(), pour ne pas ralentir
-    le démarrage de l'application.
-    """
-
-    # Mapping de normalisation des labels spaCy vers labels AIS uniformes
     LABEL_MAPPING = {
         # Labels français (fr_core_news_lg)
         "PER": "PER",
@@ -39,9 +30,9 @@ class NERService:
         "MISC": "MISC",
         # Labels anglais (en_core_web_lg)
         "PERSON": "PER",
-        "GPE": "LOC",  # GeoPolitical Entity → Lieu
-        "FAC": "LOC",  # Facility → Lieu
-        "NORP": "MISC",  # Nationalités, groupes religieux/politiques
+        "GPE": "LOC",
+        "FAC": "LOC",
+        "NORP": "MISC",
         "MONEY": "NUM",
         "CARDINAL": "NUM",
         "PERCENT": "NUM",
@@ -54,81 +45,104 @@ class NERService:
         "LAW": "MISC",
         "LANGUAGE": "MISC",
         "PRODUCT": "MISC",
-        # Labels espagnol (es_core_news_lg) — similaire au français
-        # Pas besoin de répéter PER/LOC/ORG/MISC déjà mappés
+        # Labels CAMeL BERT (arabe)
+        "PERS": "PER",
+        "ORG": "ORG",
     }
+
+    # Modèle HuggingFace pour l'arabe
+    AR_MODEL = "CAMeL-Lab/bert-base-arabic-camelbert-msa-ner"
 
     def __init__(self) -> None:
         """Initialise le service NER sans charger les modèles."""
         self._nlp_fr = None
         self._nlp_en = None
         self._nlp_es = None
+        self._nlp_ar = None
         logger.info("NERService initialisé (modèles chargés à la demande)")
 
+    # ==================== spaCy Models ====================
+
     def _load_model_fr(self):
-        """Charge le modèle français (appelé une seule fois)."""
+        """Charge le modèle français (lazy loading)."""
         if self._nlp_fr is not None:
             return self._nlp_fr
-
         try:
             import spacy
         except ImportError:
-            logger.error(
-                "spaCy n'est pas installé. Lancez : pip install spacy==3.7.4"
-            )
+            logger.error("spaCy n'est pas installé.")
             raise
-
         logger.info("⏳ Chargement du modèle NER français...")
         self._nlp_fr = spacy.load("fr_core_news_lg")
         logger.success("✅ Modèle français chargé")
         return self._nlp_fr
 
     def _load_model_en(self):
-        """Charge le modèle anglais (appelé une seule fois)."""
+        """Charge le modèle anglais (lazy loading)."""
         if self._nlp_en is not None:
             return self._nlp_en
-
         try:
             import spacy
         except ImportError:
-            logger.error(
-                "spaCy n'est pas installé. Lancez : pip install spacy==3.7.4"
-            )
+            logger.error("spaCy n'est pas installé.")
             raise
-
         logger.info("⏳ Chargement du modèle NER anglais...")
         self._nlp_en = spacy.load("en_core_web_lg")
         logger.success("✅ Modèle anglais chargé")
         return self._nlp_en
 
     def _load_model_es(self):
-        """Charge le modèle espagnol (appelé une seule fois)."""
+        """Charge le modèle espagnol (lazy loading)."""
         if self._nlp_es is not None:
             return self._nlp_es
-
         try:
             import spacy
         except ImportError:
-            logger.error(
-                "spaCy n'est pas installé. Lancez : pip install spacy==3.7.4"
-            )
+            logger.error("spaCy n'est pas installé.")
             raise
-
         logger.info("⏳ Chargement du modèle NER espagnol...")
         self._nlp_es = spacy.load("es_core_news_lg")
         logger.success("✅ Modèle espagnol chargé")
         return self._nlp_es
 
-    def _normalize_label(self, label: str) -> str:
-        """Normalise un label spaCy vers un label AIS standard.
+    # ==================== HuggingFace Arabic Model ====================
 
-        Args:
-            label: Label brut retourné par spaCy (ex: "PERSON", "GPE", "MONEY")
-
-        Returns:
-            Label normalisé AIS (ex: "PER", "LOC", "NUM")
+    def _load_model_ar(self):
+        """Charge le modèle NER arabe via HuggingFace (lazy loading).
+        
+        Modèle : CAMeL-Lab/bert-base-arabic-camelbert-msa-ner
+        Téléchargement automatique (~500 MB) au premier appel.
+        GPU activé automatiquement si disponible.
         """
+        if self._nlp_ar is not None:
+            return self._nlp_ar
+        try:
+            import torch
+            from transformers import pipeline
+            
+            device = 0 if torch.cuda.is_available() else -1
+            logger.info(f"⏳ Chargement du modèle NER arabe : {self.AR_MODEL}...")
+            logger.info(f"   Device : {'GPU CUDA' if device == 0 else 'CPU'}")
+            
+            self._nlp_ar = pipeline(
+                "ner",
+                model=self.AR_MODEL,
+                aggregation_strategy="simple",
+                device=device,
+            )
+            logger.success(f"✅ Modèle NER arabe chargé ({'GPU' if device == 0 else 'CPU'})")
+            return self._nlp_ar
+        except Exception as e:
+            logger.error(f"❌ Erreur chargement modèle arabe : {e}")
+            return None
+
+    # ==================== Label Normalization ====================
+
+    def _normalize_label(self, label: str) -> str:
+        """Normalise un label vers un label AIS standard."""
         return self.LABEL_MAPPING.get(label, "MISC")
+
+    # ==================== Main Method ====================
 
     def extract_entities(
         self,
@@ -138,20 +152,60 @@ class NERService:
         """Extrait les entités nommées d'un texte.
 
         Args:
-            text: Texte à analyser (transcription audio).
-            language: Code langue ('fr', 'en', 'es').
+            text: Texte à analyser.
+            language: Code langue ('fr', 'en', 'es', 'ar').
 
         Returns:
-            Liste de dictionnaires avec :
-                - text (str) : texte de l'entité
-                - label (str) : catégorie normalisée (PER, ORG, LOC, DATE, NUM, MISC)
-                - start (int) : position de début (caractères)
-                - end (int) : position de fin (caractères)
+            Liste de dicts avec text, label, start, end.
 
         Raises:
             ValueError: si la langue n'est pas supportée.
         """
-        # Sélection du modèle selon la langue
+        # ===== Arabe : HuggingFace CAMeL BERT =====
+        if language == "ar":
+            nlp = self._load_model_ar()
+            if nlp is None:
+                logger.warning("⚠️  NER arabe non disponible, retour liste vide.")
+                return []
+
+            logger.info(f"🔍 Extraction NER arabe : {len(text)} caractères")
+            try:
+                raw_entities = nlp(text)
+                entities = []
+                prev = None
+
+                for ent in raw_entities:
+                    label = ent.get("entity_group", "MISC")
+                    normalized = self._normalize_label(label)
+                    word = ent.get("word", "").replace("##", "").strip()
+                    start = ent.get("start", 0)
+                    end = ent.get("end", 0)
+
+                    if not word:
+                        continue
+
+                    # Fusionner entités adjacentes (fix subwords BERT)
+                    if prev and prev["label"] == normalized and start <= prev["end"] + 1:
+                        prev["text"] = text[prev["start"]:end]
+                        prev["end"] = end
+                    else:
+                        if prev:
+                            entities.append(prev)
+                        prev = {"text": word, "label": normalized, "start": start, "end": end}
+
+                if prev:
+                    entities.append(prev)
+
+                logger.success(
+                    f"✅ NER AR OK : {len(entities)} entités "
+                    f"({', '.join(set(e['label'] for e in entities)) if entities else 'aucune'})"
+                )
+                return entities
+            except Exception as e:
+                logger.error(f"❌ Erreur NER arabe : {e}")
+                return []
+
+        # ===== Autres langues : spaCy =====
         if language == "fr":
             nlp = self._load_model_fr()
         elif language == "en":
@@ -161,32 +215,26 @@ class NERService:
         else:
             raise ValueError(
                 f"Langue '{language}' non supportée. "
-                "Langues disponibles : fr, en, es"
+                "Langues disponibles : fr, en, es, ar"
             )
 
         logger.info(f"🔍 Extraction NER : langue={language}, texte={len(text)} caractères")
 
-        # Traitement NER
         doc = nlp(text)
-
-        # Construction de la liste d'entités normalisées
         entities = []
         for ent in doc.ents:
             normalized_label = self._normalize_label(ent.label_)
-            entities.append(
-                {
-                    "text": ent.text,
-                    "label": normalized_label,
-                    "start": ent.start_char,
-                    "end": ent.end_char,
-                }
-            )
+            entities.append({
+                "text": ent.text,
+                "label": normalized_label,
+                "start": ent.start_char,
+                "end": ent.end_char,
+            })
 
         logger.success(
-            f"✅ NER OK : {len(entities)} entités détectées "
-            f"({', '.join(set(e['label'] for e in entities))})"
+            f"✅ NER OK : {len(entities)} entités "
+            f"({', '.join(set(e['label'] for e in entities)) if entities else 'aucune'})"
         )
-
         return entities
 
 
@@ -195,11 +243,7 @@ _ner_service: Optional[NERService] = None
 
 
 def get_ner_service() -> NERService:
-    """Retourne l'instance unique du service NER (Singleton).
-
-    Garantit qu'un seul ensemble de modèles spaCy est chargé en mémoire,
-    partagé entre toutes les requêtes de l'application.
-    """
+    """Retourne l'instance unique du service NER."""
     global _ner_service
     if _ner_service is None:
         _ner_service = NERService()

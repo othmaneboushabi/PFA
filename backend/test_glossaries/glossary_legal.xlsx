@@ -1,0 +1,31 @@
+ """Script pour créer un fichier Excel de test."""
+import openpyxl
+from pathlib import Path
+
+# Créer un nouveau workbook
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.title = "Glossary"
+
+# Headers
+headers = ["source_term", "target_term", "source_lang", "target_lang", "context", "domain"]
+ws.append(headers)
+
+# Données juridiques
+legal_terms = [
+    ["mise en demeure", "formal notice", "fr", "en", "Acte juridique préalable", "legal"],
+    ["résiliation", "termination", "fr", "en", "Fin d'un contrat", "legal"],
+    ["assignation", "summons", "fr", "en", "Convocation devant un tribunal", "legal"],
+    ["jugement", "judgment", "fr", "en", "Décision de justice", "legal"],
+    ["préjudice", "damages", "fr", "en", "Dommage subi", "legal"],
+    ["prescription", "statute of limitations", "fr", "en", "Délai légal", "legal"],
+    ["ordonnance", "court order", "fr", "en", "Décision du juge", "legal"],
+]
+
+for row in legal_terms:
+    ws.append(row)
+
+# Sauvegarder
+output_path = Path("test_glossaries/glossary_legal.xlsx")
+wb.save(output_path)
+print(f"✅ Fichier Excel créé : {output_path}")

@@ -1,0 +1,42 @@
+ [
+  {
+    "source": "CRAT",
+    "target": "Reference Center on Teratogenic Agents (CRAT)",
+    "source_lang": "fr",
+    "target_lang": "en",
+    "context": "Centre de Référence sur les Agents Tératogènes",
+    "domain": "medical"
+  },
+  {
+    "source": "HAS",
+    "target": "French National Authority for Health (HAS)",
+    "source_lang": "fr",
+    "target_lang": "en",
+    "context": "Haute Autorité de Santé",
+    "domain": "medical"
+  },
+  {
+    "source": "FOLFOX",
+    "target": "FOLFOX (Folinic acid + Fluorouracil + Oxaliplatin)",
+    "source_lang": "fr",
+    "target_lang": "en",
+    "context": "Protocole de chimiothérapie",
+    "domain": "medical"
+  },
+  {
+    "source": "AVC",
+    "target": "Stroke",
+    "source_lang": "fr",
+    "target_lang": "en",
+    "context": "Accident Vasculaire Cérébral",
+    "domain": "medical"
+  },
+  {
+    "source": "IRM",
+    "target": "MRI (Magnetic Resonance Imaging)",
+    "source_lang": "fr",
+    "target_lang": "en",
+    "context": "Imagerie par Résonance Magnétique",
+    "domain": "medical"
+  }
+]

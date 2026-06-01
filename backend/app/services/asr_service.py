@@ -14,12 +14,26 @@ TODO J6 :
     - Ajouter VAD (Voice Activity Detection)
     - Exposer via WebSocket pour l'UI
 """
+import os
+import sys
+
+# Ajouter les DLLs CUDA 12 au PATH pour faster-whisper
+_cuda_paths = [
+    os.path.join(sys.prefix, "Lib", "site-packages", "nvidia", "cublas", "bin"),
+    os.path.join(sys.prefix, "Lib", "site-packages", "nvidia", "cudnn", "bin"),
+    os.path.join(sys.prefix, "Lib", "site-packages", "nvidia", "cuda_nvrtc", "bin"),
+]
+for _path in _cuda_paths:
+    if os.path.exists(_path):
+        os.add_dll_directory(_path)
+        
 import time
 from typing import Optional
 
 from loguru import logger
 
 from app.core.config import settings
+
 
 
 class ASRService:

@@ -15,41 +15,42 @@ Documentation interactive :
 """
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.api.routes import health, ner, transcription, translation
+from app.api.routes import health, ner, transcription, translation, glossary, orchestrator, summarization, acronym,streaming
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.database import init_db, close_db
+
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Gère le cycle de vie de l'application.
-
-    Le code AVANT le yield s'exécute au démarrage.
-    Le code APRÈS le yield s'exécute à l'arrêt.
-    """
-    # ===== STARTUP =====
+async def lifespan(app: FastAPI):
+    """Gestion du cycle de vie de l'application."""
+    # Startup
     setup_logging()
-    logger.info("=" * 70)
+    logger.info("======================================================================")
     logger.info(f"🚀 Démarrage de {settings.app_name} v{settings.app_version}")
     logger.info(f"   Environnement : {settings.app_env}")
-    logger.info(
-        f"   Whisper       : modèle={settings.whisper_model} | "
-        f"device={settings.whisper_device} | "
-        f"compute={settings.whisper_compute_type}"
-    )
+    logger.info(f"   Whisper       : modèle={settings.whisper_model} | device={settings.whisper_device} | compute={settings.whisper_compute_type}")
+    
+    # Initialiser la base de données
+    await init_db()
+    
     logger.info(f"   API           : http://{settings.api_host}:{settings.api_port}")
     logger.info(f"   Docs          : http://localhost:{settings.api_port}/docs")
-    logger.info("=" * 70)
-
+    logger.info("======================================================================")
+    
     yield
-
-    # ===== SHUTDOWN =====
-    logger.info("👋 Arrêt propre de l'application AIS")
+    
+    # Shutdown
+    logger.info("🛑 Arrêt de l'application")
+    await close_db()
 
 
 # ===== Création de l'application FastAPI =====
@@ -78,6 +79,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ===== Fichiers statiques (Frontend) =====
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+@app.get("/ui", include_in_schema=False)
+async def serve_frontend():
+    return FileResponse("app/static/index.html")
 
 # ===== Enregistrement des routes =====
 app.include_router(
@@ -85,11 +92,14 @@ app.include_router(
     prefix=settings.api_prefix,
     tags=["Health"],
 )
+# Transcription
 app.include_router(
     transcription.router,
     prefix=settings.api_prefix,
     tags=["Transcription"],
 )
+
+# NER
 app.include_router(
     ner.router,
     prefix=settings.api_prefix,
@@ -99,6 +109,31 @@ app.include_router(
     translation.router,
     prefix=settings.api_prefix,
     tags=["Translation"],
+)
+app.include_router(
+    glossary.router,
+    prefix=settings.api_prefix,
+    tags=["Glossary"],
+)
+app.include_router(
+    orchestrator.router,
+    prefix=settings.api_prefix,
+    tags=["Orchestrator"],
+)
+app.include_router(
+    summarization.router,
+    prefix=settings.api_prefix,
+    tags=["Summarization"],
+)
+app.include_router(
+    acronym.router,
+    prefix=settings.api_prefix,
+    tags=["Acronyms"],
+)
+# Streaming temps réel
+app.include_router(
+    streaming.router,
+    tags=["Streaming"],
 )
 # ===== Route racine =====
 @app.get("/", tags=["Root"])

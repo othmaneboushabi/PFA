@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIS — Assistant Interprète Simultané</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a; --bg2: #111827; --bg3: #1a2236; --border: #1e2d45;
+    --accent: #3b82f6; --accent2: #06b6d4; --accent3: #8b5cf6;
+    --green: #10b981; --orange: #f59e0b; --red: #ef4444;
+    --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b;
+    --card: #0f1729; --glow: rgba(59,130,246,0.15);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ''; position: fixed; inset: 0; z-index: 0; background: radial-gradient(ellipse 80% 50% at 20% -10%, rgba(59,130,246,0.08) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(139,92,246,0.06) 0%, transparent 60%); pointer-events: none; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+  header { padding: 20px 0; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; background: rgba(10,14,26,0.9); backdrop-filter: blur(12px); }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), var(--accent3)); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo-text { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .logo-sub { font-size: 11px; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; }
+  .status-bar { display: flex; gap: 8px; align-items: center; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  .status-dot.offline { background: var(--red); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-text { font-size: 12px; color: var(--text2); }
+  .tabs { display: flex; gap: 4px; padding: 20px 0 0; border-bottom: 1px solid var(--border); }
+  .tab { padding: 10px 20px; border-radius: 8px 8px 0 0; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text3); border: none; background: transparent; transition: all 0.2s; font-family: 'DM Sans', sans-serif; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); background: var(--bg3); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg3); }
+  .tab-icon { margin-right: 6px; }
+  .panel { display: none; padding: 24px 0; }
+  .panel.active { display: block; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:900px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; transition: border-color 0.2s; }
+  .card:hover { border-color: rgba(59,130,246,0.3); }
+  .card-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card-title::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: linear-gradient(to bottom, var(--accent), var(--accent2)); flex-shrink: 0; }
+  .mic-section { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 32px 0; }
+  .mic-btn { width: 100px; height: 100px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg3); cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+  .mic-btn:hover { border-color: var(--accent); background: var(--glow); transform: scale(1.05); }
+  .mic-btn.recording { border-color: var(--red); background: rgba(239,68,68,0.1); animation: recording-pulse 1.5s infinite; }
+  @keyframes recording-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 0 20px rgba(239,68,68,0); } }
+  .mic-status { font-size: 14px; color: var(--text2); text-align: center; font-weight: 500; }
+  .mic-status.recording { color: var(--red); }
+  .mic-timer { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .lang-row { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .lang-group { flex: 1; }
+  .lang-group label { font-size: 11px; color: var(--text3); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  select { width: 100%; padding: 10px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; outline: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  select:focus { border-color: var(--accent); }
+  .lang-arrow { color: var(--text3); font-size: 18px; margin-top: 18px; }
+  .translate-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); cursor: pointer; margin-bottom: 16px; }
+  .toggle { width: 36px; height: 20px; border-radius: 10px; background: var(--bg3); border: 1px solid var(--border); position: relative; cursor: pointer; transition: all 0.2s; }
+  .toggle.on { background: var(--accent); border-color: var(--accent); }
+  .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text3); transition: all 0.2s; }
+  .toggle.on::after { left: 18px; background: white; }
+  .transcription-box { min-height: 180px; background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 15px; line-height: 1.7; color: var(--text); position: relative; overflow-y: auto; max-height: 300px; }
+  .transcription-box.empty::before { content: 'La transcription apparaîtra ici en temps réel...'; color: var(--text3); font-style: italic; }
+  .transcription-chunk { display: inline; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .cursor-blink { display: inline-block; width: 2px; height: 16px; background: var(--accent); margin-left: 2px; animation: blink 1s infinite; vertical-align: middle; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .translation-box { min-height: 120px; background: rgba(6,182,212,0.04); border: 1px solid rgba(6,182,212,0.2); border-radius: 12px; padding: 16px; font-size: 14px; line-height: 1.7; color: var(--text2); }
+  .translation-box.empty::before { content: 'La traduction apparaîtra ici...'; color: var(--text3); font-style: italic; }
+  .entities-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 60px; }
+  .entity-tag { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: default; }
+  .entity-PER { background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+  .entity-ORG { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+  .entity-LOC { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+  .entity-DATE { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+  .entity-MISC { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+  .entity-NUM { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+  .btn { padding: 10px 20px; border-radius: 10px; border: none; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--text); }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .upload-zone { border: 2px dashed var(--border); border-radius: 16px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--glow); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-text { font-size: 15px; color: var(--text2); margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: var(--text3); }
+  .file-selected { color: var(--accent); font-weight: 500; }
+  .progress-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin: 12px 0; }
+  .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.3s; width: 0%; }
+  .result-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .copy-btn { font-size: 11px; color: var(--accent); cursor: pointer; background: none; border: none; padding: 2px 8px; border-radius: 4px; }
+  textarea.result-text { width: 100%; min-height: 100px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: var(--text); font-size: 14px; line-height: 1.6; resize: vertical; font-family: 'DM Sans', sans-serif; outline: none; }
+  .glossary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .glossary-table th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  .glossary-table td { padding: 10px 14px; border-bottom: 1px solid rgba(30,45,69,0.5); color: var(--text2); }
+  .glossary-table tr:hover td { background: var(--bg3); }
+  .score-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .score-high { background: rgba(16,185,129,0.15); color: var(--green); }
+  .score-med { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .score-tag { background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 2px 8px; font-size: 11px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media(max-width:700px) { .stat-grid { grid-template-columns: repeat(2,1fr); } }
+  .stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .stat-value { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .stat-label { font-size: 11px; color: var(--text3); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .toast { position: fixed; bottom: 24px; right: 24px; z-index: 999; padding: 12px 20px; border-radius: 12px; font-size: 13px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); box-shadow: 0 8px 32px rgba(0,0,0,0.4); transform: translateY(80px); opacity: 0; transition: all 0.3s; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(16,185,129,0.4); }
+  .toast.error { border-color: rgba(239,68,68,0.4); }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+  .spinner.show { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .section-header { margin-bottom: 20px; }
+  .section-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .section-sub { font-size: 13px; color: var(--text3); }
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); }
+  .empty-state .empty-icon { font-size: 32px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+  input[type=text], input[type=search] { width: 100%; padding: 10px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .summary-list { list-style: none; }
+  .summary-list li { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--bg3); border-radius: 0 8px 8px 0; margin-bottom: 8px; font-size: 14px; line-height: 1.6; color: var(--text2); }
+  .wave-container { display: flex; align-items: center; gap: 3px; height: 30px; justify-content: center; margin: 10px 0; }
+  .wave-bar { width: 3px; height: 8px; border-radius: 2px; background: var(--accent); animation: wave 1s ease-in-out infinite; }
+  .wave-bar:nth-child(2){animation-delay:0.1s} .wave-bar:nth-child(3){animation-delay:0.2s} .wave-bar:nth-child(4){animation-delay:0.3s} .wave-bar:nth-child(5){animation-delay:0.2s} .wave-bar:nth-child(6){animation-delay:0.1s}
+  @keyframes wave { 0%,100%{height:8px;opacity:0.5} 50%{height:24px;opacity:1} }
+  .wave-container.hidden { display: none; }
+  .processing-indicator { display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; margin-top: 12px; font-size: 13px; color: var(--accent); display: none; }
+  .processing-indicator.show { display: flex; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">🎙</div>
+        <div>
+          <div class="logo-text">AIS</div>
+          <div class="logo-sub">Assistant Interprète Simultané</div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-text" id="statusText">Connexion...</span>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('realtime')" id="tab-realtime"><span class="tab-icon">🎤</span>Temps Réel</button>
+      <button class="tab" onclick="switchTab('batch')" id="tab-batch"><span class="tab-icon">📁</span>Fichier Audio</button>
+      <button class="tab" onclick="switchTab('glossary')" id="tab-glossary"><span class="tab-icon">📚</span>Glossaires</button>
+      <button class="tab" onclick="switchTab('tools')" id="tab-tools"><span class="tab-icon">🔧</span>Outils IA</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- TEMPS RÉEL -->
+  <div class="panel active" id="panel-realtime">
+    <div class="section-header">
+      <div class="section-title">Transcription Temps Réel</div>
+      <div class="section-sub">Parlez dans votre microphone — transcription via Whisper GPU</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">⚙️ Configuration</div>
+        <div class="lang-row">
+          <div class="lang-group">
+            <label>Langue source</label>
+            <select id="rt-src-lang">
+              <option value="fr">🇫🇷 Français</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="ar">🇸🇦 العربية</option>
+              <option value="es">🇪🇸 Español</option>
+            </select>
+          </div>
+          <div class="lang-arrow">→</div>
+          <div class="lang-group">
+            <label>Traduire vers</label>
+            <select id="rt-tgt-lang">
+              <option value="en">🇬🇧 English</option>
+              <option value="fr">🇫🇷 Français</option>
+              <option value="ar">🇸🇦 العربية</option>
+              <option value="es">🇪🇸 Español</option>
+            </select>
+          </div>
+        </div>
+        <label class="translate-toggle" onclick="toggleTranslate()">
+          <div class="toggle" id="translateToggle"></div>
+          <span>Traduction automatique</span>
+        </label>
+        <div class="mic-section">
+          <div class="wave-container hidden" id="waveContainer">
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          </div>
+          <button class="mic-btn" id="micBtn" onclick="toggleRecording()">🎤</button>
+          <div class="mic-timer" id="micTimer">00:00</div>
+          <div class="mic-status" id="micStatus">Cliquez pour démarrer l'enregistrement</div>
+        </div>
+        <div class="processing-indicator" id="processingIndicator">
+          <div class="spinner show" style="display:inline-block"></div>
+          <span id="processingText">Transcription en cours...</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="card-title">📝 Transcription</div>
+          <div class="transcription-box empty" id="rtTranscription"></div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" onclick="clearTranscription()">🗑 Effacer</button>
+            <button class="btn btn-secondary" onclick="copyText('rtTranscription')">📋 Copier</button>
+          </div>
+        </div>
+        <div class="card" id="translationCard" style="display:none">
+          <div class="card-title">🌍 Traduction</div>
+          <div class="translation-box empty" id="rtTranslation"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🏷️ Entités Détectées</div>
+      <div class="entities-list" id="rtEntities">
+        <div class="empty-state"><div class="empty-icon">🔍</div><p>Les entités apparaîtront après la transcription</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH -->
+  <div class="panel" id="panel-batch">
+    <div class="section-header">
+      <div class="section-title">Traitement Fichier Audio</div>
+      <div class="section-sub">Uploadez un fichier audio pour le pipeline complet</div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div class="card">
+          <div class="card-title">📁 Fichier Audio</div>
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.flac,.ogg" onchange="onFileSelect(event)">
+            <div class="upload-icon">🎵</div>
+            <div class="upload-text" id="uploadText">Glissez votre fichier ici</div>
+            <div class="upload-sub">MP3, WAV, M4A, FLAC — Max 25MB</div>
+          </div>
+          <div class="lang-row" style="margin-top:16px">
+            <div class="lang-group"><label>Langue source</label>
+              <select id="batch-src-lang">
+                <option value="fr">🇫🇷 Français</option><option value="en">🇬🇧 English</option>
+                <option value="ar">🇸🇦 العربية</option><option value="es">🇪🇸 Español</option>
+              </select>
+            </div>
+            <div class="lang-arrow">→</div>
+            <div class="lang-group"><label>Langue cible</label>
+              <select id="batch-tgt-lang">
+                <option value="en">🇬🇧 English</option><option value="fr">🇫🇷 Français</option>
+                <option value="ar">🇸🇦 العربية</option><option value="es">🇪🇸 Español</option>
+              </select>
+            </div>
+          </div>
+          <div class="progress-bar" id="batchProgress" style="display:none"><div class="progress-fill" id="batchProgressFill"></div></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="processBatch()">
+              <span class="spinner" id="batchSpinner"></span>▶ Analyser
+            </button>
+          </div>
+        </div>
+        <div class="stat-grid" style="margin-top:16px">
+          <div class="stat-card"><div class="stat-value" id="statDuration">—</div><div class="stat-label">Durée (s)</div></div>
+          <div class="stat-card"><div class="stat-value" id="statChars">—</div><div class="stat-label">Caractères</div></div>
+          <div class="stat-card"><div class="stat-value" id="statEntities">—</div><div class="stat-label">Entités</div></div>
+          <div class="stat-card"><div class="stat-value" id="statGlossary">—</div><div class="stat-label">Termes</div></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="card-title">📝 Transcription</div>
+          <div class="result-label">Texte original <button class="copy-btn" onclick="copyText('batchTranscription')">📋 Copier</button></div>
+          <textarea class="result-text" id="batchTranscription" readonly placeholder="La transcription apparaîtra ici..."></textarea>
+        </div>
+        <div class="card">
+          <div class="card-title">🌍 Traduction</div>
+          <div class="result-label">Texte traduit <button class="copy-btn" onclick="copyText('batchTranslation')">📋 Copier</button></div>
+          <textarea class="result-text" id="batchTranslation" readonly placeholder="La traduction apparaîtra ici..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🏷️ Entités Nommées</div>
+      <div class="entities-list" id="batchEntities">
+        <div class="empty-state"><div class="empty-icon">🔍</div><p>Uploadez un fichier pour voir les entités</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOSSARY -->
+  <div class="panel" id="panel-glossary">
+    <div class="section-header">
+      <div class="section-title">Gestion des Glossaires</div>
+      <div class="section-sub">Importez vos glossaires métier (finance, médical, juridique...)</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">📤 Importer un Glossaire</div>
+        <div class="upload-zone" style="padding:24px" id="glossaryUploadZone">
+          <input type="file" id="glossaryFile" accept=".csv,.json,.xlsx" onchange="onGlossarySelect(event)">
+          <div class="upload-icon" style="font-size:28px">📊</div>
+          <div class="upload-text" id="glossaryUploadText">CSV, JSON ou XLSX</div>
+          <div class="upload-sub">Colonnes : source_term, target_term, source_lang, target_lang</div>
+        </div>
+        <div class="lang-row" style="margin-top:16px">
+          <div class="lang-group"><label>Format</label>
+            <select id="glossaryFormat"><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel (XLSX)</option></select>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="uploadGlossary()">
+            <span class="spinner" id="glossarySpinner"></span>📤 Importer
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔍 Recherche de Termes</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Terme à rechercher</label>
+          <input type="search" id="searchTerm" placeholder="Ex: OPCVM, AI, GDP..." onkeypress="if(event.key==='Enter')searchGlossary()">
+        </div>
+        <div class="lang-row">
+          <div class="lang-group"><label>Langue source</label>
+            <select id="search-src-lang"><option value="fr">🇫🇷 Français</option><option value="en">🇬🇧 English</option><option value="ar">🇸🇦 العربية</option></select>
+          </div>
+          <div class="lang-arrow">→</div>
+          <div class="lang-group"><label>Langue cible</label>
+            <select id="search-tgt-lang"><option value="en">🇬🇧 English</option><option value="fr">🇫🇷 Français</option><option value="ar">🇸🇦 العربية</option></select>
+          </div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="searchGlossary()">🔍 Rechercher</button></div>
+        <div id="searchResults" style="margin-top:16px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOLS -->
+  <div class="panel" id="panel-tools">
+    <div class="section-header">
+      <div class="section-title">Outils IA</div>
+      <div class="section-sub">Résumé automatique et extraction d'acronymes</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">📝 Résumé Automatique</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Texte à résumer</label>
+          <textarea class="result-text" id="summaryInput" placeholder="Collez votre texte ici (min. 100 mots)..." rows="6"></textarea>
+        </div>
+        <div class="lang-row">
+          <div class="lang-group"><label>Nombre de points</label>
+            <select id="summaryPoints"><option value="3">3 points</option><option value="5" selected>5 points</option><option value="7">7 points</option><option value="10">10 points</option></select>
+          </div>
+          <div class="lang-group"><label>Focus (optionnel)</label><input type="text" id="summaryFocus" placeholder="Ex: key decisions..."></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="summarizeText()"><span class="spinner" id="summarySpinner"></span>✨ Résumer</button>
+        </div>
+        <div id="summaryResults" style="margin-top:16px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔤 Extraction d'Acronymes</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Texte contenant des acronymes</label>
+          <textarea class="result-text" id="acronymInput" placeholder="Ex: L'OPCVM investit dans le CAC 40..." rows="4"></textarea>
+        </div>
+        <div class="lang-row">
+          <div class="lang-group"><label>Domaine (optionnel)</label><input type="text" id="acronymDomain" placeholder="finance, medical, tech..."></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="extractAcronyms()"><span class="spinner" id="acronymSpinner"></span>🔍 Extraire</button>
+        </div>
+        <div id="acronymResults" style="margin-top:16px"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8000';
+let ws = null;
+let mediaRecorder = null;
+let isRecording = false;
+let timerInterval = null;
+let seconds = 0;
+let translateEnabled = false;
+let fullTranscription = '';
+
+window.onload = () => { checkHealth(); };
+
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/api/v1/health`);
+    if (r.ok) {
+      document.getElementById('statusDot').className = 'status-dot';
+      document.getElementById('statusText').textContent = 'API connectée';
+    }
+  } catch {
+    document.getElementById('statusDot').className = 'status-dot offline';
+    document.getElementById('statusText').textContent = 'API déconnectée';
+  }
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`panel-${tab}`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function toggleTranslate() {
+  translateEnabled = !translateEnabled;
+  document.getElementById('translateToggle').classList.toggle('on', translateEnabled);
+  document.getElementById('translationCard').style.display = translateEnabled ? 'block' : 'none';
+}
+
+async function toggleRecording() {
+  if (isRecording) { stopRecording(); } else { await startRecording(); }
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+    const srcLang = document.getElementById('rt-src-lang').value;
+    const tgtLang = document.getElementById('rt-tgt-lang').value;
+
+    const wsUrl = `ws://localhost:8000/ws/transcribe?language=${srcLang}&translate=${translateEnabled}&target_lang=${tgtLang}`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => console.log('✅ WebSocket connecté');
+
+    // ✅ FIX PRINCIPAL : gestion complète des messages
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      console.log('📨 Message WS:', data);
+
+      if (data.type === 'transcription' && data.text) {
+        appendTranscription(data.text);
+        if (data.translation) updateTranslation(data.translation);
+        extractEntitiesRealtime(data.text, srcLang);
+        document.getElementById('micStatus').textContent = '✅ Transcription reçue';
+        document.getElementById('processingIndicator').classList.remove('show');
+        showToast('✅ Transcription terminée !', 'success');
+      }
+
+      if (data.type === 'receiving') {
+        const kb = Math.round(data.total_bytes / 1000);
+        document.getElementById('processingText').textContent = `Audio reçu : ${kb} KB`;
+      }
+
+      if (data.type === 'stopped') {
+        setTimeout(() => ws.close(), 500);
+      }
+
+      if (data.type === 'error') {
+        showToast(`❌ Erreur : ${data.message}`, 'error');
+        document.getElementById('processingIndicator').classList.remove('show');
+      }
+    };
+
+    ws.onerror = (e) => {
+      showToast('❌ Erreur WebSocket', 'error');
+      document.getElementById('processingIndicator').classList.remove('show');
+    };
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/ogg';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorder.ondataavailable = async (e) => {
+      if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+        const arrayBuffer = await e.data.arrayBuffer();
+        ws.send(arrayBuffer);
+      }
+    };
+
+    mediaRecorder.start(3000);
+
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micBtn').textContent = '⏹';
+    document.getElementById('micStatus').textContent = '🔴 Enregistrement en cours...';
+    document.getElementById('micStatus').className = 'mic-status recording';
+    document.getElementById('waveContainer').classList.remove('hidden');
+    document.getElementById('processingIndicator').classList.remove('show');
+
+    seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      const m = String(Math.floor(seconds/60)).padStart(2,'0');
+      const s = String(seconds%60).padStart(2,'0');
+      document.getElementById('micTimer').textContent = `${m}:${s}`;
+    }, 1000);
+
+  } catch (err) {
+    console.error(err);
+    showToast('❌ Accès microphone refusé', 'error');
+  }
+}
+
+function stopRecording() {
+  clearInterval(timerInterval);
+  isRecording = false;
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('micBtn').textContent = '🎤';
+  document.getElementById('micStatus').textContent = 'Traitement en cours...';
+  document.getElementById('micStatus').className = 'mic-status';
+  document.getElementById('waveContainer').classList.add('hidden');
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    // ✅ Attendre que le dernier chunk soit envoyé avant d'envoyer stop
+    mediaRecorder.addEventListener('stop', () => {
+      setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          document.getElementById('processingIndicator').classList.add('show');
+          document.getElementById('processingText').textContent = 'Transcription en cours...';
+          ws.send(JSON.stringify({ action: 'stop' }));
+        }
+      }, 500);
+    }, { once: true });
+
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  } else {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: 'stop' }));
+    }
+  }
+}
+
+function appendTranscription(text) {
+  const box = document.getElementById('rtTranscription');
+  box.classList.remove('empty');
+  fullTranscription += (fullTranscription ? ' ' : '') + text;
+  box.innerHTML = `<span class="transcription-chunk">${fullTranscription}</span><span class="cursor-blink"></span>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateTranslation(text) {
+  const box = document.getElementById('rtTranslation');
+  box.classList.remove('empty');
+  box.textContent = text;
+}
+
+function clearTranscription() {
+  fullTranscription = '';
+  const box = document.getElementById('rtTranscription');
+  box.innerHTML = '';
+  box.classList.add('empty');
+  document.getElementById('rtTranslation').innerHTML = '';
+  document.getElementById('rtTranslation').classList.add('empty');
+  document.getElementById('rtEntities').innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>Les entités apparaîtront après la transcription</p></div>';
+  document.getElementById('micStatus').textContent = 'Cliquez pour démarrer l\'enregistrement';
+}
+
+async function extractEntitiesRealtime(text, lang) {
+  try {
+    const r = await fetch(`${API}/api/v1/ner`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language: lang })
+    });
+    const data = await r.json();
+    renderEntities(data.entities || [], 'rtEntities');
+  } catch {}
+}
+
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) {
+    document.getElementById('uploadText').textContent = `✅ ${file.name}`;
+    document.getElementById('uploadText').className = 'upload-text file-selected';
+  }
+}
+
+async function processBatch() {
+  const file = document.getElementById('audioFile').files[0];
+  if (!file) { showToast('⚠️ Sélectionnez un fichier audio', 'error'); return; }
+  const srcLang = document.getElementById('batch-src-lang').value;
+  const tgtLang = document.getElementById('batch-tgt-lang').value;
+  const spinner = document.getElementById('batchSpinner');
+  const progressBar = document.getElementById('batchProgress');
+  const progressFill = document.getElementById('batchProgressFill');
+  spinner.classList.add('show');
+  progressBar.style.display = 'block';
+  let prog = 0;
+  const progInterval = setInterval(() => { prog = Math.min(prog + Math.random() * 8, 90); progressFill.style.width = prog + '%'; }, 500);
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('source_lang', srcLang);
+    formData.append('target_lang', tgtLang);
+    formData.append('extract_entities', 'true');
+    formData.append('translate', 'true');
+    formData.append('enrich_glossary', srcLang !== 'ar' ? 'true' : 'false');
+    const r = await fetch(`${API}/api/v1/process`, { method: 'POST', body: formData });
+    const data = await r.json();
+    clearInterval(progInterval);
+    progressFill.style.width = '100%';
+    setTimeout(() => { progressBar.style.display = 'none'; progressFill.style.width = '0'; }, 800);
+    document.getElementById('batchTranscription').value = data.transcription?.text || '';
+    document.getElementById('batchTranslation').value = data.translation?.translated_text || '';
+    document.getElementById('statDuration').textContent = Math.round(data.transcription?.duration || 0);
+    document.getElementById('statChars').textContent = data.transcription?.text?.length || 0;
+    document.getElementById('statEntities').textContent = (data.entities || []).length;
+    document.getElementById('statGlossary').textContent = (data.glossary_matches || []).length;
+    renderEntities(data.entities || [], 'batchEntities');
+    showToast('✅ Analyse terminée !', 'success');
+  } catch (err) {
+    clearInterval(progInterval);
+    progressBar.style.display = 'none';
+    showToast('❌ Erreur lors du traitement', 'error');
+  } finally {
+    spinner.classList.remove('show');
+  }
+}
+
+function renderEntities(entities, containerId) {
+  const container = document.getElementById(containerId);
+  if (!entities || entities.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>Aucune entité détectée</p></div>';
+    return;
+  }
+  const unique = [...new Map(entities.map(e => [e.text, e])).values()];
+  container.innerHTML = unique.map(e => `<span class="entity-tag entity-${e.label}" title="${e.label}">${e.text} <small style="opacity:0.6">${e.label}</small></span>`).join('');
+}
+
+function onGlossarySelect(e) {
+  const file = e.target.files[0];
+  if (file) {
+    document.getElementById('glossaryUploadText').textContent = `✅ ${file.name}`;
+    const ext = file.name.split('.').pop().toLowerCase();
+    document.getElementById('glossaryFormat').value = ext === 'xlsx' ? 'xlsx' : ext;
+  }
+}
+
+async function uploadGlossary() {
+  const file = document.getElementById('glossaryFile').files[0];
+  if (!file) { showToast('⚠️ Sélectionnez un fichier', 'error'); return; }
+  const format = document.getElementById('glossaryFormat').value;
+  const spinner = document.getElementById('glossarySpinner');
+  spinner.classList.add('show');
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('format_type', format);
+    const r = await fetch(`${API}/api/v1/glossary/upload`, { method: 'POST', body: formData });
+    const data = await r.json();
+    showToast(`✅ ${data.entries_count} termes importés ! (ID: ${data.glossary_id})`, 'success');
+  } catch { showToast('❌ Erreur lors de l\'import', 'error'); }
+  finally { spinner.classList.remove('show'); }
+}
+
+async function searchGlossary() {
+  const term = document.getElementById('searchTerm').value.trim();
+  if (!term) { showToast('⚠️ Entrez un terme à rechercher', 'error'); return; }
+  const srcLang = document.getElementById('search-src-lang').value;
+  const tgtLang = document.getElementById('search-tgt-lang').value;
+  try {
+    const r = await fetch(`${API}/api/v1/glossary/search`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ term, source_lang: srcLang, target_lang: tgtLang, fuzzy_threshold: 70 })
+    });
+    const data = await r.json();
+    const results = document.getElementById('searchResults');
+    if (!data.results || data.results.length === 0) { results.innerHTML = '<div class="empty-state"><p>Aucun résultat trouvé</p></div>'; return; }
+    results.innerHTML = `<table class="glossary-table"><thead><tr><th>Terme</th><th>Traduction</th><th>Domaine</th><th>Score</th></tr></thead><tbody>${data.results.map(r => `<tr><td><strong>${r.source_term}</strong></td><td>${r.target_term}</td><td>${r.domain ? `<span class="score-tag">${r.domain}</span>` : '—'}</td><td><span class="score-badge ${r.match_score >= 90 ? 'score-high' : 'score-med'}">${r.match_score}%</span></td></tr>`).join('')}</tbody></table>`;
+  } catch { showToast('❌ Erreur de recherche', 'error'); }
+}
+
+async function summarizeText() {
+  const text = document.getElementById('summaryInput').value.trim();
+  if (!text) { showToast('⚠️ Entrez du texte à résumer', 'error'); return; }
+  const numPoints = parseInt(document.getElementById('summaryPoints').value);
+  const focus = document.getElementById('summaryFocus').value.trim() || null;
+  const spinner = document.getElementById('summarySpinner');
+  spinner.classList.add('show');
+  try {
+    const r = await fetch(`${API}/api/v1/summarize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, num_points: numPoints, focus }) });
+    const data = await r.json();
+    const results = document.getElementById('summaryResults');
+    if (!data.summarized) { results.innerHTML = `<div class="empty-state"><p>Texte trop court (${data.word_count} mots). Minimum 100 mots requis.</p></div>`; return; }
+    const bullets = Array.isArray(data.summary) ? data.summary : [data.summary];
+    results.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">${data.word_count} mots → ${data.num_points} points (compression ${Math.round((1-data.compression_ratio)*100)}%)</div><ul class="summary-list">${bullets.map(b => `<li>${b}</li>`).join('')}</ul>`;
+  } catch { showToast('❌ Erreur lors du résumé', 'error'); }
+  finally { spinner.classList.remove('show'); }
+}
+
+async function extractAcronyms() {
+  const text = document.getElementById('acronymInput').value.trim();
+  if (!text) { showToast('⚠️ Entrez du texte', 'error'); return; }
+  const domain = document.getElementById('acronymDomain').value.trim() || null;
+  const spinner = document.getElementById('acronymSpinner');
+  spinner.classList.add('show');
+  try {
+    const r = await fetch(`${API}/api/v1/acronyms/process`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, domain, source_lang: 'fr', target_lang: 'en' }) });
+    const data = await r.json();
+    const results = document.getElementById('acronymResults');
+    if (!data.acronyms || data.acronyms.length === 0) { results.innerHTML = '<div class="empty-state"><p>Aucun acronyme détecté</p></div>'; return; }
+    results.innerHTML = `<table class="glossary-table"><thead><tr><th>Acronyme</th><th>Forme complète</th><th>Source</th><th>Confiance</th></tr></thead><tbody>${data.acronyms.map(a => `<tr><td><strong style="color:var(--accent)">${a.acronym}</strong></td><td title="${a.explanation}">${a.full_form}</td><td><span class="score-tag">${a.source === 'glossary' ? '📚 Glossaire' : '🤖 IA'}</span></td><td><span class="score-badge ${a.confidence >= 0.9 ? 'score-high' : 'score-med'}">${Math.round(a.confidence*100)}%</span></td></tr>`).join('')}</tbody></table>`;
+  } catch { showToast('❌ Erreur lors de l\'extraction', 'error'); }
+  finally { spinner.classList.remove('show'); }
+}
+
+function copyText(elementId) {
+  const el = document.getElementById(elementId);
+  const text = el.tagName === 'TEXTAREA' ? el.value : el.textContent;
+  if (!text.trim()) return;
+  navigator.clipboard.writeText(text).then(() => showToast('📋 Copié !', 'success'));
+}
+
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = `toast ${type} show`;
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) { document.getElementById('audioFile').files = e.dataTransfer.files; document.getElementById('uploadText').textContent = `✅ ${file.name}`; document.getElementById('uploadText').className = 'upload-text file-selected'; }
+});
+</script>
+</body>
+</html>

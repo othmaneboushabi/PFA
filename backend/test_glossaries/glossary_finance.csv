@@ -1,0 +1,6 @@
+source_term,target_term,source_lang,target_lang,context,domain
+OPCVM,Mutual Fund,fr,en,Organisme de Placement Collectif en Valeurs Mobilières,finance
+VaR,Value at Risk,fr,en,Mesure du risque de marché,finance
+Eonia,Euro Short-Term Rate,fr,en,Taux d'intérêt interbancaire,finance
+CAC 40,CAC 40 Index,fr,en,Principal indice boursier français,finance
+PEA,Equity Savings Plan,fr,en,Plan d'Épargne en Actions,finance

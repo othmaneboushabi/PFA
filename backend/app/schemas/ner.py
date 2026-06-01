@@ -1,8 +1,4 @@
-"""Schémas Pydantic pour les endpoints NER.
-
-Ces schémas définissent le format des requêtes et réponses API,
-utilisés pour la validation et la génération de la doc Swagger.
-"""
+"""Schémas Pydantic pour les endpoints NER."""
 from pydantic import BaseModel, Field
 
 
@@ -32,8 +28,8 @@ class NERRequest(BaseModel):
     )
     language: str = Field(
         default="fr",
-        description="Code langue (fr, en, es)",
-        examples=["fr", "en", "es"],
+        description="Code langue (fr, en, es, ar)",
+        examples=["fr", "en", "es", "ar"],
     )
 
 
@@ -41,7 +37,7 @@ class NERResponse(BaseModel):
     """Réponse complète d'une extraction NER."""
 
     text: str = Field(..., description="Texte analysé")
-    language: str = Field(..., description="Code langue utilisé (fr, en, es)")
+    language: str = Field(..., description="Code langue utilisé (fr, en, es, ar)")
     entities: list[EntityItem] = Field(
         default_factory=list,
         description="Liste des entités détectées",

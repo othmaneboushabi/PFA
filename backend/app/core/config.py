@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # ========== ASR (faster-whisper) ==========
     whisper_model: str = "small"
-    whisper_device: str = "cpu"
+    whisper_device: str = "cuda"
     whisper_compute_type: str = "int8"
     whisper_language: str = "auto"
 

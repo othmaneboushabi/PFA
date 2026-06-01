@@ -1,21 +1,10 @@
-"""Service de traduction multilingue basé sur NLLB-200.
+"""Service de traduction via Qwen 2.5 7B (Ollama) - 100% GPU.
 
-Ce module encapsule la logique de traduction :
-    - Support multilingue : FR ↔ EN ↔ ES ↔ AR
-    - Chargement paresseux du modèle NLLB-200-distilled-600M
-    - Cache Redis pour éviter les re-traductions
-    - Gestion des codes langues NLLB spécifiques
-
-Pattern Singleton : une seule instance du modèle NLLB est chargée
-en mémoire pour toute l'application.
-
-Codes langues NLLB (pas ISO standard) :
-    - Français : fra_Latn
-    - Anglais : eng_Latn
-    - Espagnol : spa_Latn
-    - Arabe MSA : arb_Arab
+Utilise Ollama comme backend pour gérer Qwen 2.5 7B sur GPU RTX 4060.
 """
 import hashlib
+import time
+import requests
 from typing import Optional
 
 import redis
@@ -24,99 +13,136 @@ from loguru import logger
 from app.core.config import settings
 
 
-class TranslationService:
-    """Service de traduction via NLLB-200 avec cache Redis.
+class TranslationServiceGemma:
+    """Service de traduction via Qwen 2.5 7B avec cache Redis."""
 
-    Le modèle est chargé de manière paresseuse (lazy loading)
-    lors du premier appel à translate().
-    """
-
-    # Mapping codes langues ISO → codes langues NLLB
-    LANG_CODE_MAPPING = {
-        "fr": "fra_Latn",
-        "en": "eng_Latn",
-        "es": "spa_Latn",
-        "ar": "arb_Arab",
+    LANG_NAMES = {
+        "fr": "French",
+        "en": "English",
+        "es": "Spanish",
+        "ar": "Arabic",
     }
 
+    OLLAMA_API_URL = "http://localhost:11434/api/generate"
+    MODEL_NAME = "qwen2.5:7b"
+
     def __init__(self) -> None:
-        """Initialise le service de traduction sans charger le modèle."""
-        self._model = None
-        self._tokenizer = None
         self._redis_client = None
-        logger.info("TranslationService initialisé (modèle chargé à la demande)")
+        logger.info(f"TranslationService initialisé (Ollama + {self.MODEL_NAME})")
+        self._warmup()
+
+    def _warmup(self):
+        """Précharge le modèle au démarrage pour éviter la latence."""
+        try:
+            logger.info(f"⏳ Préchargement {self.MODEL_NAME} sur GPU...")
+            response = requests.post(
+                self.OLLAMA_API_URL,
+                json={
+                    "model": self.MODEL_NAME,
+                    "prompt": "Hello",
+                    "stream": False,
+                    "options": {"num_gpu": 99}
+                },
+                timeout=60,
+            )
+            result = response.json()
+            if result.get("done_reason") == "load":
+                logger.info("⏳ Modèle en chargement, attente 3s...")
+                time.sleep(3)
+            logger.success(f"✅ {self.MODEL_NAME} prêt sur GPU !")
+        except Exception as e:
+            logger.warning(f"⚠️  Warmup échoué (normal au 1er démarrage) : {e}")
 
     def _get_redis_client(self):
-        """Connexion au cache Redis (lazy loading)."""
         if self._redis_client is not None:
             return self._redis_client
-
         try:
             self._redis_client = redis.Redis(
-                host="localhost",
-                port=6379,
-                db=0,
-                decode_responses=True,  # Retourne des strings, pas des bytes
-                socket_connect_timeout=2,
-                socket_timeout=2,
+                host="localhost", port=6379, db=0,
+                decode_responses=True,
+                socket_connect_timeout=2, socket_timeout=2,
             )
-            # Test de connexion
             self._redis_client.ping()
             logger.success("✅ Connexion Redis établie")
         except redis.ConnectionError:
-            logger.warning(
-                "⚠️  Redis non accessible, cache désactivé "
-                "(traductions non mises en cache)"
-            )
+            logger.warning("⚠️  Redis non accessible, cache désactivé")
             self._redis_client = None
-
         return self._redis_client
 
-    def _load_model(self):
-        """Charge le modèle NLLB-200 (appelé une seule fois)."""
-        if self._model is not None:
-            return self._model, self._tokenizer
-
-        try:
-            from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-        except ImportError:
-            logger.error(
-                "transformers ou torch n'est pas installé. "
-                "Lancez : pip install transformers torch"
-            )
-            raise
-
-        logger.info("⏳ Chargement du modèle NLLB-200-distilled-600M...")
-        model_name = "facebook/nllb-200-distilled-600M"
-
-        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self._model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-        logger.success(
-            "✅ Modèle NLLB chargé (2.4 GB en RAM, "
-            "chargement initial ~10-15s)"
-        )
-
-        return self._model, self._tokenizer
-
-    def _generate_cache_key(
-        self, text: str, src_lang: str, tgt_lang: str
-    ) -> str:
-        """Génère une clé Redis unique pour une traduction.
-
-        Format : "translation:{src}:{tgt}:{hash}"
-        où hash = MD5 du texte (pour éviter les clés trop longues).
-
-        Args:
-            text: Texte source
-            src_lang: Code langue source (fr, en, es, ar)
-            tgt_lang: Code langue cible (fr, en, es, ar)
-
-        Returns:
-            Clé Redis (ex: "translation:fr:en:a3b5c7...")
-        """
+    def _generate_cache_key(self, text: str, src_lang: str, tgt_lang: str) -> str:
         text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()[:12]
-        return f"translation:{src_lang}:{tgt_lang}:{text_hash}"
+        return f"translation:qwen:{src_lang}:{tgt_lang}:{text_hash}"
+
+    def _split_text(self, text: str, max_chars: int = 300) -> list:
+        """Découpe un texte long en chunks."""
+        words = text.split()
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for word in words:
+            word_length = len(word) + 1
+            if current_length + word_length > max_chars and current_chunk:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [word]
+                current_length = word_length
+            else:
+                current_chunk.append(word)
+                current_length += word_length
+
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        return chunks
+
+    def _call_ollama(self, prompt: str) -> str:
+        """Appelle l'API Ollama avec retry automatique."""
+        try:
+            payload = {
+                "model": self.MODEL_NAME,
+                "prompt": prompt,          # ← prompt (pas messages !)
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "num_gpu": 99,         # ← Forcer GPU
+                }
+            }
+
+            logger.debug(f"📤 Appel Ollama : {self.MODEL_NAME}")
+
+            response = requests.post(
+                self.OLLAMA_API_URL,
+                json=payload,
+                timeout=120,
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            generated_text = result.get("response", "").strip()
+
+            # Retry si modèle en cours de chargement
+            retries = 0
+            while not generated_text and retries < 3:
+                retries += 1
+                logger.warning(f"⚠️  Réponse vide, attente 5s... (retry {retries}/3)")
+                time.sleep(5)
+                response = requests.post(
+                    self.OLLAMA_API_URL,
+                    json=payload,
+                    timeout=120,
+                )
+                response.raise_for_status()
+                result = response.json()
+                generated_text = result.get("response", "").strip()
+
+            logger.debug(f"📥 Réponse reçue ({len(generated_text)} chars)")
+
+            return generated_text
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Erreur Ollama : {e}")
+            raise RuntimeError(f"Ollama API error: {e}") from e
 
     def translate(
         self,
@@ -125,138 +151,108 @@ class TranslationService:
         tgt_lang: str = "en",
         use_cache: bool = True,
     ) -> dict:
-        """Traduit un texte d'une langue vers une autre.
+        """Traduit un texte via Qwen 2.5 7B sur GPU."""
 
-        Args:
-            text: Texte à traduire
-            src_lang: Code langue source (fr, en, es, ar)
-            tgt_lang: Code langue cible (fr, en, es, ar)
-            use_cache: Utiliser le cache Redis (défaut: True)
+        if src_lang not in self.LANG_NAMES:
+            raise ValueError(f"Langue source '{src_lang}' non supportée.")
+        if tgt_lang not in self.LANG_NAMES:
+            raise ValueError(f"Langue cible '{tgt_lang}' non supportée.")
 
-        Returns:
-            dict avec :
-                - translated_text (str) : texte traduit
-                - src_lang (str) : langue source
-                - tgt_lang (str) : langue cible
-                - from_cache (bool) : True si résultat vient du cache
-                - cache_key (str) : clé Redis utilisée
-
-        Raises:
-            ValueError: si langue source ou cible non supportée
-        """
-        # Validation langues
-        if src_lang not in self.LANG_CODE_MAPPING:
-            raise ValueError(
-                f"Langue source '{src_lang}' non supportée. "
-                f"Langues disponibles : {list(self.LANG_CODE_MAPPING.keys())}"
-            )
-        if tgt_lang not in self.LANG_CODE_MAPPING:
-            raise ValueError(
-                f"Langue cible '{tgt_lang}' non supportée. "
-                f"Langues disponibles : {list(self.LANG_CODE_MAPPING.keys())}"
-            )
-
-        # Cas trivial : même langue source et cible
         if src_lang == tgt_lang:
             return {
+                "original_text": text,
                 "translated_text": text,
                 "src_lang": src_lang,
                 "tgt_lang": tgt_lang,
                 "from_cache": False,
                 "cache_key": None,
+                "char_count": len(text),
             }
 
         cache_key = self._generate_cache_key(text, src_lang, tgt_lang)
 
-        # Tentative de récupération depuis Redis
+        # Cache Redis
         if use_cache:
             redis_client = self._get_redis_client()
             if redis_client is not None:
                 try:
                     cached = redis_client.get(cache_key)
                     if cached:
-                        logger.info(
-                            f"✅ Traduction depuis cache : {src_lang}→{tgt_lang}"
-                        )
+                        logger.info(f"✅ Cache hit : {src_lang}→{tgt_lang}")
                         return {
+                            "original_text": text,
                             "translated_text": cached,
                             "src_lang": src_lang,
                             "tgt_lang": tgt_lang,
                             "from_cache": True,
                             "cache_key": cache_key,
+                            "char_count": len(text),
                         }
                 except redis.RedisError as e:
                     logger.warning(f"⚠️  Erreur Redis (lecture) : {e}")
 
-        # Cache miss → traduction via NLLB
-        logger.info(
-            f"🌍 Traduction NLLB : {src_lang}→{tgt_lang} | "
-            f"texte={len(text)} caractères"
-        )
+        logger.info(f"🌍 Traduction {self.MODEL_NAME} : {src_lang}→{tgt_lang} | {len(text)} chars")
 
-        model, tokenizer = self._load_model()
+        src_lang_name = self.LANG_NAMES[src_lang]
+        tgt_lang_name = self.LANG_NAMES[tgt_lang]
 
-        # Conversion codes langues ISO → NLLB
-        src_lang_nllb = self.LANG_CODE_MAPPING[src_lang]
-        tgt_lang_nllb = self.LANG_CODE_MAPPING[tgt_lang]
+        # Chunking pour textes longs
+        if len(text) > 300:
+            logger.info(f"📄 Texte long ({len(text)} chars) → découpage en chunks")
+            chunks = self._split_text(text, max_chars=300)
+            translated_chunks = []
 
-        # Tokenization
-        inputs = tokenizer(
-            text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512,
-        )
+            for i, chunk in enumerate(chunks):
+                logger.info(f"   Chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
+                prompt = f"""Translate the following text from {src_lang_name} to {tgt_lang_name}.
+Only provide the translation, nothing else.
 
-        # Génération traduction
-        translated_tokens = model.generate(
-            **inputs,
-            forced_bos_token_id=tokenizer.lang_code_to_id[tgt_lang_nllb],
-            max_length=512,
-        )
+Text to translate: {chunk}
 
-        # Décodage
-        translated_text = tokenizer.decode(
-            translated_tokens[0], skip_special_tokens=True
-        )
+Translation:"""
+                chunk_translation = self._call_ollama(prompt)
+                translated_chunks.append(chunk_translation)
 
-        logger.success(
-            f"✅ Traduction NLLB OK : {src_lang}→{tgt_lang} | "
-            f"sortie={len(translated_text)} caractères"
-        )
+            translated_text = " ".join(translated_chunks)
+            logger.success(f"✅ {len(chunks)} chunks traduits → {len(translated_text)} chars")
 
-        # Sauvegarde dans Redis
+        else:
+            prompt = f"""Translate the following text from {src_lang_name} to {tgt_lang_name}.
+Only provide the translation, nothing else.
+
+Text to translate: {text}
+
+Translation:"""
+            translated_text = self._call_ollama(prompt)
+
+        logger.success(f"✅ Traduction OK : {src_lang}→{tgt_lang} | {len(translated_text)} chars")
+
+        # Sauvegarde cache
         if use_cache:
             redis_client = self._get_redis_client()
             if redis_client is not None:
                 try:
-                    # TTL de 7 jours (604800 secondes)
                     redis_client.setex(cache_key, 604800, translated_text)
-                    logger.debug(f"💾 Sauvegarde cache : {cache_key}")
+                    logger.debug(f"💾 Cache sauvegardé : {cache_key}")
                 except redis.RedisError as e:
                     logger.warning(f"⚠️  Erreur Redis (écriture) : {e}")
 
         return {
+            "original_text": text,
             "translated_text": translated_text,
             "src_lang": src_lang,
             "tgt_lang": tgt_lang,
             "from_cache": False,
             "cache_key": cache_key,
+            "char_count": len(text),
         }
 
 
-# ===== Pattern Singleton =====
-_translation_service: Optional[TranslationService] = None
+_translation_service: Optional[TranslationServiceGemma] = None
 
 
-def get_translation_service() -> TranslationService:
-    """Retourne l'instance unique du service de traduction (Singleton).
-
-    Garantit qu'un seul modèle NLLB est chargé en mémoire,
-    partagé entre toutes les requêtes de l'application.
-    """
+def get_translation_service() -> TranslationServiceGemma:
     global _translation_service
     if _translation_service is None:
-        _translation_service = TranslationService()
+        _translation_service = TranslationServiceGemma()
     return _translation_service

@@ -3,8 +3,7 @@
 Endpoints :
     POST /ner : extraction NER sur un texte fourni
 
-Cet endpoint est utilisé pour enrichir la transcription audio
-avec les entités clés (personnes, lieux, organisations, dates, montants).
+Langues supportées : FR, EN, ES, AR
 """
 from fastapi import APIRouter, HTTPException, status
 from loguru import logger
@@ -14,14 +13,15 @@ from app.services.ner_service import get_ner_service
 
 router = APIRouter()
 
+SUPPORTED_LANGUAGES = ["fr", "en", "es", "ar"]
 
 @router.post(
     "/ner",
     response_model=NERResponse,
     summary="Extraction d'entités nommées (NER)",
     description=(
-        "Extrait les entités nommées d'un texte via spaCy. "
-        "Langues supportées : FR, EN, ES. "
+        "Extrait les entités nommées d'un texte via spaCy (FR/EN/ES) "
+        "ou HuggingFace CAMeL BERT (AR). "
         "Labels normalisés : PER, ORG, LOC, DATE, NUM, MISC."
     ),
     status_code=status.HTTP_200_OK,
@@ -36,11 +36,11 @@ async def extract_entities(request: NERRequest) -> NERResponse:
 
     try:
         # Validation langue
-        if request.language not in ["fr", "en", "es"]:
+        if request.language not in SUPPORTED_LANGUAGES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Langue '{request.language}' non supportée. "
-                "Langues disponibles : fr, en, es",
+                f"Langues disponibles : {', '.join(SUPPORTED_LANGUAGES)}",
             )
 
         # Extraction NER
@@ -50,13 +50,15 @@ async def extract_entities(request: NERRequest) -> NERResponse:
             language=request.language,
         )
 
-        # Construction de la réponse
         return NERResponse(
             text=request.text,
             language=request.language,
             entities=[EntityItem(**e) for e in entities],
             entity_count=len(entities),
         )
+
+    except HTTPException:
+        raise
 
     except ValueError as e:
         logger.error(f"❌ Erreur de validation : {e}")
