@@ -204,12 +204,16 @@ class TranslationServiceGemma:
 
             for i, chunk in enumerate(chunks):
                 logger.info(f"   Chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
-                prompt = f"""Translate the following text from {src_lang_name} to {tgt_lang_name}.
-Only provide the translation, nothing else.
+                prompt = f"""You are a professional translator. Translate the text below from {src_lang_name} to {tgt_lang_name}.
 
-Text to translate: {chunk}
+                    Rules:
+                    - Output ONLY the translated text
+                    - Do NOT explain, do NOT add comments
+                    - Do NOT use any other language
 
-Translation:"""
+                    Text: {chunk}
+
+                    {tgt_lang_name} translation:"""
                 chunk_translation = self._call_ollama(prompt)
                 translated_chunks.append(chunk_translation)
 
