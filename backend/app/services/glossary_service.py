@@ -210,7 +210,7 @@ class GlossaryService:
                     "target_lang": entry.target_lang,
                     "context": entry.context,
                     "domain": entry.domain,
-                    "match_score": score,
+                    "match_score": int(score),
                     "matched_as": matched_term,
                 })
         

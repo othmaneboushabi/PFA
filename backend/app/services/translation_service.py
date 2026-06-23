@@ -1,7 +1,4 @@
-"""Service de traduction via Qwen 2.5 7B (Ollama) - 100% GPU.
-
-Utilise Ollama comme backend pour gérer Qwen 2.5 7B sur GPU RTX 4060.
-"""
+"""Service de traduction via Qwen 2.5 7B (Ollama)."""
 import hashlib
 import time
 import requests
@@ -32,9 +29,9 @@ class TranslationServiceGemma:
         self._warmup()
 
     def _warmup(self):
-        """Précharge le modèle au démarrage pour éviter la latence."""
+        """Précharge le modèle au démarrage."""
         try:
-            logger.info(f"⏳ Préchargement {self.MODEL_NAME} sur GPU...")
+            logger.info(f"⏳ Préchargement {self.MODEL_NAME}...")
             response = requests.post(
                 self.OLLAMA_API_URL,
                 json={
@@ -49,9 +46,9 @@ class TranslationServiceGemma:
             if result.get("done_reason") == "load":
                 logger.info("⏳ Modèle en chargement, attente 3s...")
                 time.sleep(3)
-            logger.success(f"✅ {self.MODEL_NAME} prêt sur GPU !")
+            logger.success(f"✅ {self.MODEL_NAME} prêt !")
         except Exception as e:
-            logger.warning(f"⚠️  Warmup échoué (normal au 1er démarrage) : {e}")
+            logger.warning(f"⚠️  Warmup échoué : {e}")
 
     def _get_redis_client(self):
         if self._redis_client is not None:
@@ -79,7 +76,6 @@ class TranslationServiceGemma:
         chunks = []
         current_chunk = []
         current_length = 0
-
         for word in words:
             word_length = len(word) + 1
             if current_length + word_length > max_chars and current_chunk:
@@ -89,10 +85,8 @@ class TranslationServiceGemma:
             else:
                 current_chunk.append(word)
                 current_length += word_length
-
         if current_chunk:
             chunks.append(" ".join(current_chunk))
-
         return chunks
 
     def _call_ollama(self, prompt: str) -> str:
@@ -100,28 +94,25 @@ class TranslationServiceGemma:
         try:
             payload = {
                 "model": self.MODEL_NAME,
-                "prompt": prompt,          # ← prompt (pas messages !)
+                "prompt": prompt,
                 "stream": False,
                 "options": {
                     "temperature": 0.3,
                     "top_p": 0.9,
-                    "num_gpu": 99,         # ← Forcer GPU
+                    "num_gpu": 99,
                 }
             }
-
             logger.debug(f"📤 Appel Ollama : {self.MODEL_NAME}")
-
             response = requests.post(
                 self.OLLAMA_API_URL,
                 json=payload,
                 timeout=120,
             )
             response.raise_for_status()
-
             result = response.json()
             generated_text = result.get("response", "").strip()
 
-            # Retry si modèle en cours de chargement
+            # Retry si réponse vide
             retries = 0
             while not generated_text and retries < 3:
                 retries += 1
@@ -137,7 +128,6 @@ class TranslationServiceGemma:
                 generated_text = result.get("response", "").strip()
 
             logger.debug(f"📥 Réponse reçue ({len(generated_text)} chars)")
-
             return generated_text
 
         except requests.exceptions.RequestException as e:
@@ -151,8 +141,7 @@ class TranslationServiceGemma:
         tgt_lang: str = "en",
         use_cache: bool = True,
     ) -> dict:
-        """Traduit un texte via Qwen 2.5 7B sur GPU."""
-
+        """Traduit un texte via Qwen 2.5 7B."""
         if src_lang not in self.LANG_NAMES:
             raise ValueError(f"Langue source '{src_lang}' non supportée.")
         if tgt_lang not in self.LANG_NAMES:
@@ -201,32 +190,31 @@ class TranslationServiceGemma:
             logger.info(f"📄 Texte long ({len(text)} chars) → découpage en chunks")
             chunks = self._split_text(text, max_chars=300)
             translated_chunks = []
-
             for i, chunk in enumerate(chunks):
                 logger.info(f"   Chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
-                prompt = f"""You are a professional translator. Translate the text below from {src_lang_name} to {tgt_lang_name}.
-
-                    Rules:
-                    - Output ONLY the translated text
-                    - Do NOT explain, do NOT add comments
-                    - Do NOT use any other language
-
-                    Text: {chunk}
-
-                    {tgt_lang_name} translation:"""
+                prompt = (
+                    f"You are a professional translator. "
+                    f"Translate the following text from {src_lang_name} to {tgt_lang_name}. "
+                    f"IMPORTANT: Respond ONLY in {tgt_lang_name}. "
+                    f"Do NOT use Chinese or any other language. "
+                    f"Output ONLY the translation, nothing else.\n\n"
+                    f"Text: {chunk}\n\n"
+                    f"{tgt_lang_name} translation:"
+                )
                 chunk_translation = self._call_ollama(prompt)
                 translated_chunks.append(chunk_translation)
-
             translated_text = " ".join(translated_chunks)
             logger.success(f"✅ {len(chunks)} chunks traduits → {len(translated_text)} chars")
-
         else:
-            prompt = f"""Translate the following text from {src_lang_name} to {tgt_lang_name}.
-Only provide the translation, nothing else.
-
-Text to translate: {text}
-
-Translation:"""
+            prompt = (
+                f"You are a professional translator. "
+                f"Translate the following text from {src_lang_name} to {tgt_lang_name}. "
+                f"IMPORTANT: Respond ONLY in {tgt_lang_name}. "
+                f"Do NOT use Chinese or any other language. "
+                f"Output ONLY the translation, nothing else.\n\n"
+                f"Text: {text}\n\n"
+                f"{tgt_lang_name} translation:"
+            )
             translated_text = self._call_ollama(prompt)
 
         logger.success(f"✅ Traduction OK : {src_lang}→{tgt_lang} | {len(translated_text)} chars")

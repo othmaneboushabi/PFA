@@ -7,6 +7,12 @@ from loguru import logger
 
 from app.services.glossary_service import get_glossary_service
 
+LANG_NAMES = {
+    "fr": "French",
+    "en": "English",
+    "ar": "Arabic",
+    "es": "Spanish",
+}
 
 class AcronymService:
     """Service d'extraction et d'explication d'acronymes."""
@@ -17,43 +23,39 @@ class AcronymService:
 
     def __init__(self):
         self.glossary_service = get_glossary_service()
-        logger.info(f"AcronymService initialisé ({self.MODEL_NAME} + Glossaires)")
+        logger.info(f"AcronymService initialise ({self.MODEL_NAME} + Glossaires)")
+
+    def extract_acronyms(self, text: str) -> List[str]:
+        acronyms = re.findall(self.ACRONYM_PATTERN, text)
+        return sorted(set(acronyms))
 
     def _call_ollama(self, prompt: str, timeout: int = 60) -> str:
-        """Appelle Ollama pour générer une explication."""
         try:
             payload = {
                 "model": self.MODEL_NAME,
-                "prompt": prompt,          # ← prompt (pas messages !)
+                "prompt": prompt,
                 "stream": False,
                 "options": {
                     "temperature": 0.3,
                     "top_p": 0.9,
-                    "num_gpu": 99,         # ← Forcer GPU
+                    "num_gpu": 99,
                 }
             }
-
             response = requests.post(
                 self.OLLAMA_API_URL,
                 json=payload,
                 timeout=timeout,
             )
             response.raise_for_status()
-
             result = response.json()
             generated_text = result.get("response", "").strip()
 
-            # Retry si réponse vide
             retries = 0
             while not generated_text and retries < 3:
                 retries += 1
-                logger.warning(f"⚠️  Réponse vide, retry {retries}/3...")
+                logger.warning(f"Reponse vide, retry {retries}/3...")
                 time.sleep(5)
-                response = requests.post(
-                    self.OLLAMA_API_URL,
-                    json=payload,
-                    timeout=timeout,
-                )
+                response = requests.post(self.OLLAMA_API_URL, json=payload, timeout=timeout)
                 response.raise_for_status()
                 result = response.json()
                 generated_text = result.get("response", "").strip()
@@ -61,14 +63,8 @@ class AcronymService:
             return generated_text
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Erreur Ollama : {e}")
+            logger.error(f"Erreur Ollama : {e}")
             raise RuntimeError(f"Ollama API error: {e}") from e
-
-    def extract_acronyms(self, text: str) -> List[str]:
-        acronyms = re.findall(self.ACRONYM_PATTERN, text)
-        unique_acronyms = sorted(set(acronyms))
-        logger.info(f"🔤 {len(unique_acronyms)} acronymes détectés : {unique_acronyms}")
-        return unique_acronyms
 
     async def explain_acronym(
         self,
@@ -78,10 +74,8 @@ class AcronymService:
         source_lang: str = "fr",
         target_lang: str = "en",
     ) -> Dict[str, Any]:
-        """Explique un acronyme via glossaire ou Qwen 2.5."""
-        logger.info(f"🔍 Explication acronyme : '{acronym}'")
+        logger.info(f"Explication acronyme : '{acronym}'")
 
-        # Chercher dans glossaires d'abord
         glossary_results = await self.glossary_service.search_term(
             term=acronym,
             source_lang=source_lang,
@@ -91,7 +85,7 @@ class AcronymService:
 
         if glossary_results:
             best_match = glossary_results[0]
-            logger.success(f"✅ Trouvé dans glossaire : {acronym} → {best_match['target_term']}")
+            logger.success(f"Trouve dans glossaire : {acronym} -> {best_match['target_term']}")
             return {
                 "acronym": acronym,
                 "explanation": best_match["target_term"],
@@ -102,27 +96,28 @@ class AcronymService:
                 "glossary_id": best_match["glossary_id"],
             }
 
-        # Sinon demander à Qwen
-        logger.info(f"📚 Absent du glossaire → demande à {self.MODEL_NAME}")
+        logger.info(f"Absent du glossaire -> demande a {self.MODEL_NAME}")
 
+        tgt_lang_name = LANG_NAMES.get(target_lang, "English")
         domain_hint = f" in the field of {domain}" if domain else ""
         context_hint = f"\n\nContext: {context}" if context else ""
 
-        prompt = f"""Explain the acronym "{acronym}"{domain_hint}.
-Provide:
-1. The full form (what the acronym stands for)
-2. A brief 1-sentence explanation
-
-Format your answer as:
-Full form: [full form]
-Explanation: [explanation]{context_hint}
-
-Answer:"""
+        prompt = (
+            f'Explain the acronym "{acronym}"{domain_hint}.\n'
+            f"IMPORTANT: Respond ONLY in {tgt_lang_name}. Do not use any other language.\n\n"
+            f"Provide:\n"
+            f"1. The full form (what the acronym stands for) in {tgt_lang_name}\n"
+            f"2. A brief 1-sentence explanation in {tgt_lang_name}\n\n"
+            f"Format your answer as:\n"
+            f"Full form: [full form in {tgt_lang_name}]\n"
+            f"Explanation: [explanation in {tgt_lang_name}]"
+            f"{context_hint}\n\nAnswer:"
+        )
 
         ai_response = self._call_ollama(prompt)
         explanation = self._parse_ai_response(ai_response)
 
-        logger.success(f"✅ Explication AI : {acronym} → {explanation['full_form']}")
+        logger.success(f"Explication AI : {acronym} -> {explanation['full_form']}")
 
         return {
             "acronym": acronym,
@@ -159,13 +154,11 @@ Answer:"""
         source_lang: str = "fr",
         target_lang: str = "en",
     ) -> Dict[str, Any]:
-        """Extrait et explique tous les acronymes d'un texte."""
-        logger.info(f"📄 Traitement acronymes : {len(text)} chars | domaine={domain or 'auto'}")
+        logger.info(f"Traitement acronymes : {len(text)} chars")
 
         acronym_list = self.extract_acronyms(text)
 
         if not acronym_list:
-            logger.warning("⚠️  Aucun acronyme détecté")
             return {"text": text, "acronyms_found": 0, "acronyms": [], "domain": domain}
 
         explained_acronyms = []
@@ -180,10 +173,6 @@ Answer:"""
                 target_lang=target_lang,
             )
             explained_acronyms.append(explanation)
-
-        glossary_count = sum(1 for a in explained_acronyms if a['source'] == 'glossary')
-        ai_count = sum(1 for a in explained_acronyms if a['source'] == 'ai')
-        logger.success(f"✅ {len(explained_acronyms)} acronymes expliqués (glossaire: {glossary_count}, AI: {ai_count})")
 
         return {
             "text": text,

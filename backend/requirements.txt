@@ -1,51 +1,56 @@
 # ========== FastAPI & Server ==========
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-websockets==12.0
-pydantic==2.6.1
-pydantic-settings==2.2.1
-python-multipart==0.0.9
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.1
+websockets>=12.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.1
+python-multipart>=0.0.9
+aiofiles>=23.2.1
 
 # ========== ASR ==========
-# Note : whisper-streaming sera installé manuellement en J5-J6 depuis GitHub
-faster-whisper==1.0.3
-numpy==1.26.4
-soundfile==0.12.1
-spacy==3.7.4
-# Modèles spaCy à installer manuellement (non disponibles sur PyPI standard) :
-# pip install https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.7.0/fr_core_news_lg-3.7.0-py3-none-any.whl
-# pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
-# pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.7.0/es_core_news_lg-3.7.0-py3-none-any.whl
+faster-whisper>=1.0.3
+numpy>=2.0.0
+soundfile>=0.12.1
+pydub>=0.25.1
 
-# ========== Traduction NLLB (J10-J11) ==========
-# PyTorch CPU-only (backend pour HuggingFace Transformers)
-# Installation : pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
-torch==2.1.2
-transformers==4.37.2
-sentencepiece==0.1.99  # Tokenizer requis par NLLB
-protobuf==4.25.3       # Dépendance de sentencepiece
-sacremoses==0.1.1      # Preprocessing optionnel
-redis==5.0.1           # Client Redis pour Python
-# ========== Base de données PostgreSQL ==========
-sqlalchemy==2.0.27
-alembic==1.13.1
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
+# ========== NLP / NER ==========
+spacy>=3.8.0
+# Modèles spaCy à installer manuellement :
+# pip install https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.8.0/fr_core_news_lg-3.8.0-py3-none-any.whl
+# pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+# pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl
+
+# ========== IA / Traduction ==========
+# torch à installer séparément avec CUDA :
+# pip install torch --index-url https://download.pytorch.org/whl/cu118
+transformers>=4.40.0
+sentencepiece>=0.2.0
+protobuf>=4.25.3
+sacremoses>=0.1.1
+rapidfuzz>=3.6.1
+
+# ========== Cache & LLM ==========
+redis>=5.0.1
+httpx>=0.26.0
+
+# ========== Base de données ==========
+sqlalchemy>=2.0.27
+alembic>=1.13.1
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
 
 # ========== Utilitaires ==========
-python-dotenv==1.0.1
-loguru==0.7.2
-httpx==0.26.0
+python-dotenv>=1.0.1
+loguru>=0.7.2
 
 # ========== Tests ==========
-pytest==8.0.1
-pytest-asyncio==0.23.5
-pytest-cov==4.1.0
+pytest>=8.0.1
+pytest-asyncio>=0.23.5
+pytest-cov>=4.1.0
 
-# ========== Qualité de code (dev) ==========
-ruff==0.2.2
-black==24.2.0
-mypy==1.8.0
+# ========== Qualité de code ==========
+ruff>=0.2.2
+black>=24.2.0
 
-# ========== Prototypage UI ==========
-streamlit==1.31.1
+# ========== UI ==========
+streamlit>=1.31.1
