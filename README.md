@@ -1,65 +1,244 @@
-# AIS — Assistant Interprète Simultané
+# 🎙️ AIS — Assistant Interprète Simultané
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-In_Development-orange.svg)](#)
+> Système intelligent d'aide à l'interprétation simultanée multilingue  
+> Transcription · Traduction · NER · Streaming Temps Réel
 
-> Un copilote IA temps réel pour interprètes professionnels en conférences scientifiques internationales.
+![Python](https://img.shields.io/badge/Python-3.13-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
+![React](https://img.shields.io/badge/React-18-61DAFB)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+![EMSI](https://img.shields.io/badge/EMSI-PFA%202026-red)
 
-## 🎯 Projet
+---
 
-AIS est un système d'assistance intelligent qui écoute le flux audio de l'orateur en temps réel et affiche sur l'écran de l'interprète les informations critiques (noms propres, chiffres, terminologie technique traduite, acronymes, résumé contextuel) pour l'aider à éviter les trous de mémoire sans le distraire.
+## 📋 Description
 
-**Projet de Fin d'Année (PFA)** — 4ème année Génie Informatique, spécialisation IIR-IA
-**EMSI** en collaboration avec **ACM Chapter** & **SmartILab EMSI**
-**Année universitaire** : 2025 — 2026
+**AIS (Assistant Interprète Simultané)** est un système complet d'aide à
+l'interprétation simultanée développé dans le cadre du **Projet de Fin
+d'Années (PFA)** à l'EMSI Rabat, au sein du **SmartILab / ACM Chapter**,
+sous la supervision de **Dr. Hasnaa Chaabi**.
 
-## 👥 Équipe
+Le système fonctionne **entièrement en local** — aucune donnée ne quitte
+le PC de l'utilisateur, garantissant une confidentialité totale.
 
-| Rôle | Nom |
-|------|-----|
-| Développeur 1 | **Othmane** |
-| Développeur 2 | **Mustapha Alaoui Hamdaoui** |
-| Encadrante | **Dr. Hasnaa Chaabi** |
+---
 
-## 🛠️ Stack technique (100% open-source)
+## ✨ Fonctionnalités
 
-| Couche | Technologie |
-|--------|------------|
-| ASR | faster-whisper + whisper-streaming |
-| NER | spaCy (FR/EN/ES) + CAMeL-BERT (AR) |
-| Traduction | NLLB-200 distilled 600M |
-| LLM | Gemma 4 E4B via Ollama |
-| Backend | FastAPI + WebSockets + LangGraph |
-| Persistance | PostgreSQL + ChromaDB + Redis |
-| Frontend | React 18 + Vite + TailwindCSS |
-| Déploiement | Docker + Docker Compose |
+| Fonctionnalité | Description | Technologie |
+|---------------|-------------|-------------|
+| 🎤 Transcription ASR | 4 langues (FR, EN, ES, AR) — 97% précision | faster-Whisper |
+| 🌍 Traduction | Contextuelle, multilingue, locale | Qwen 2.5 7B |
+| 🏷️ NER | Extraction entités (PER, LOC, ORG) | spaCy + CAMeL BERT |
+| 📚 Glossaires | Import CSV/JSON/XLSX + fuzzy search | PostgreSQL + rapidfuzz |
+| ⚡ Temps Réel | Streaming WebSocket microphone | WebSocket |
+| 📝 Résumé | Résumé automatique en points clés | Qwen 2.5 7B |
+| 🔤 Acronymes | Détection + explication multilingue | Hybride |
+| 💾 Cache | Traductions mémorisées 7 jours | Redis |
 
-## 📊 Progression du projet
+---
 
-- [ ] Semaine 1 — Fondations + ASR streaming
-- [ ] Semaine 2 — NLP multilingue + Glossaires
-- [ ] Semaine 3 — Gemma 4 + Résumé contextuel
-- [ ] Semaine 4 — Documents + OCR + Frontend React
-- [ ] Semaine 5 — Tests + Évaluation + Optimisation
-- [ ] Semaine 6 — Déploiement + Documentation + Soutenance
+## 🏗️ Architecture
+Frontend React 18 (port 5173)
+
+↕ HTTP/REST + WebSocket
+
+Backend FastAPI (port 8000)
+
+↕ HTTP local / asyncpg / redis-py
+
+Services IA : Whisper · spaCy · CAMeL BERT · Qwen 2.5 7B
+
+↕
+
+Infrastructure : PostgreSQL · Redis · Docker · Ollama
+---
+
+## 🚀 Installation
+
+### Prérequis
+
+- Python 3.13+
+- Node.js 18+
+- Docker Desktop
+- Ollama
+
+### 1. Cloner le projet
+
+```bash
+git clone https://github.com/othmaneboushabi/PFA.git
+cd PFA
+```
+
+### 2. Lancer l'infrastructure
+
+```bash
+docker-compose up -d
+```
+
+### 3. Installer le backend
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+```
+
+### 4. Télécharger les modèles spaCy
+
+```bash
+python -m spacy download fr_core_news_lg
+python -m spacy download en_core_web_lg
+python -m spacy download es_core_news_lg
+```
+
+### 5. Télécharger Qwen 2.5 7B
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+### 6. Lancer le backend
+
+```bash
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+### 7. Installer et lancer le frontend
+
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
+
+### 8. Accéder à l'application
+
+| Service | URL |
+|---------|-----|
+| 🌐 Frontend | http://localhost:5173 |
+| 📡 API Swagger | http://localhost:8000/docs |
+| 🗄️ PostgreSQL | localhost:5433 |
+| 💾 Redis | localhost:6379 |
+
+---
+
+## 🛠️ Stack Technique
+
+### Backend
+| Composant | Technologie | Version |
+|-----------|-------------|---------|
+| Framework API | FastAPI + Uvicorn | 0.115+ |
+| ASR | faster-Whisper | 1.1+ |
+| NER FR/EN/ES | spaCy | 3.8+ |
+| NER Arabe | CAMeL BERT | 4.40+ |
+| LLM | Qwen 2.5 7B via Ollama | 2.5 |
+| Base de données | PostgreSQL | 16 |
+| Cache | Redis | 7 |
+| Conteneurisation | Docker Compose | 2.x |
+
+### Frontend
+| Composant | Technologie | Version |
+|-----------|-------------|---------|
+| Framework | React | 18 |
+| Bundler | Vite | 8.x |
+| Langage | JavaScript ES2023 | — |
+
+---
 
 ## 📁 Structure du projet
-ais-pfa/
-├── backend/           # API FastAPI (Python)
-├── frontend/          # Interface React (S4)
-├── models/            # Modèles IA téléchargés (gitignorés)
-├── docs/              # Documentation technique
-│   └── reports/       # Rapports hebdomadaires
-├── scripts/           # Scripts utilitaires
-├── docker/            # Dockerfiles
-└── data/              # Données de test (gitignorées)
+PFA/
 
-## 🔒 Confidentialité & Sécurité
+├── backend/
 
-AIS fonctionne **100% en local**. Aucune donnée audio ou transcription ne transite par des serveurs externes. Conforme RGPD.
+│   ├── app/
+
+│   │   ├── main.py
+
+│   │   ├── services/
+
+│   │   │   ├── asr_service.py
+
+│   │   │   ├── ner_service.py
+
+│   │   │   ├── translation_service.py
+
+│   │   │   ├── glossary_service.py
+
+│   │   │   ├── acronym_service.py
+
+│   │   │   ├── orchestrator_service.py
+
+│   │   │   └── streaming_service.py
+
+│   │   └── routers/
+
+│   ├── requirements.txt
+
+│   └── .env
+
+├── frontend/
+
+│   ├── src/
+
+│   │   ├── App.jsx
+
+│   │   ├── pages/
+
+│   │   │   ├── LandingPage.jsx
+
+│   │   │   ├── RealtimePage.jsx
+
+│   │   │   ├── BatchPage.jsx
+
+│   │   │   ├── GlossaryPage.jsx
+
+│   │   │   └── ToolsPage.jsx
+
+│   │   ├── components/
+
+│   │   │   └── EntityBadge.jsx
+
+│   │   └── services/
+
+│   │       └── api.js
+
+│   └── package.json
+
+├── docker-compose.yml
+
+└── README.md
+---
+
+## 📊 Performances
+
+| Métrique | Résultat |
+|----------|---------|
+| Précision ASR (FR) | 95.9% |
+| Précision ASR (AR) | 97.18% |
+| Précision NER (FR) | 90%+ |
+| Précision NER (AR) | 88%+ |
+| Cache Redis (hit) | < 10ms |
+| Gain cache | 400x |
+| Latence pipeline | -37% (asyncio) |
+
+---
+
+## 👥 Auteurs
+
+| Nom | Rôle |
+|-----|------|
+| **Othmane Boushabi** | Développeur Full-Stack IA |
+| **Mustapha Hamdaoui Alaoui** | Développeur Full-Stack IA |
+
+**Encadrante :** Dr. Hasnaa Chaabi  
+**Structure :** SmartILab / ACM Chapter — EMSI Rabat  
+**Année :** 2025/2026
+
+---
 
 ## 📄 Licence
 
-Apache License 2.0 — voir [LICENSE](LICENSE).
+Ce projet est développé dans le cadre académique de l'EMSI Rabat.  
+© 2026 Othmane Boushabi & Mustapha Hamdaoui Alaoui
